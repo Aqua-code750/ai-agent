@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Aura - Intelligent Assistant</title>
+    <meta name="description" content="Aura is a helpful assistant for your tough stuff, powered by Google ADK.">
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <div class="background">
+        <div class="blob blob1"></div>
+        <div class="blob blob2"></div>
+    </div>
+    
+    <div class="app-container">
+        <header>
+            <div class="logo-container">
+                <div class="aura-orb"></div>
+                <h1>Aura</h1>
+            </div>
+            <p class="subtitle">A helpful assistant for your tough stuff</p>
+        </header>
+
+        <main class="chat-container" id="chat-container">
+            <div class="message aura">
+                <div class="avatar"><i class="fa-solid fa-sparkles"></i></div>
+                <div class="message-content">
+                    <p>Hello! I'm Aura. How can I help you today?</p>
+                </div>
+            </div>
+        </main>
+
+        <footer class="input-area">
+            <form id="chat-form">
+                <input type="text" id="user-input" placeholder="Ask Aura anything..." autocomplete="off" required>
+                <button type="submit" id="send-btn"><i class="fa-solid fa-paper-plane"></i></button>
+            </form>
+            <div class="settings-hint">
+                Backend URL: <input type="text" id="backend-url" value="http://localhost:8000/chat" class="url-input" title="Point this to your deployed backend API">
+            </div>
+        </footer>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
