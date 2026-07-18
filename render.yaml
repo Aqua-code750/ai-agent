@@ -3,7 +3,7 @@ services:
     name: aura-agent
     env: python
     buildCommand: "cd my_agent && pip install -r requirements.txt"
-    startCommand: "cd my_agent && uvicorn server:app --host 0.0.0.0 --port 10000"
+    startCommand: "adk web --host 0.0.0.0 --port 10000 my_agent"
     envVars:
       - key: PORT
         value: 10000
