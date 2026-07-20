@@ -3,3 +3,5 @@ uvicorn
 pydantic
 google-adk
 google-genai
+google-cloud-aiplatform
+duckduckgo-search
