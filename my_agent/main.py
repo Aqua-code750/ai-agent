@@ -13,7 +13,17 @@ from google.adk.artifacts.in_memory_artifact_service import InMemoryArtifactServ
 from google.adk.auth.credential_service.in_memory_credential_service import InMemoryCredentialService
 from google.genai import types
 
-from my_agent.agent import root_agent
+import sys
+from pathlib import Path
+
+# Ensure project root is in sys.path
+sys.path.insert(0, str(Path(__file__).parent.parent.resolve()))
+sys.path.insert(0, str(Path(__file__).parent.resolve()))
+
+try:
+    from my_agent.agent import root_agent
+except ModuleNotFoundError:
+    from agent import root_agent
 
 app = FastAPI(title="Aura Agent")
 
@@ -222,7 +232,7 @@ HTML_CONTENT = """<!DOCTYPE html>
 """
 
 @app.get("/", response_class=HTMLResponse)
-async function get_root():
+async def get_root():
     return HTML_CONTENT
 
 if __name__ == "__main__":
