@@ -1,6 +1,10 @@
 import os
 import asyncio
-from fastapi import FastAPI, Request
+from dotenv import load_dotenv
+load_dotenv()
+load_dotenv(os.path.join(os.path.dirname(__file__), '.env'))
+
+from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -21,11 +25,11 @@ sys.path.insert(0, str(Path(__file__).parent.parent.resolve()))
 sys.path.insert(0, str(Path(__file__).parent.resolve()))
 
 try:
-    from my_agent.agent import root_agent
+    from my_agent.agent import root_agent, search_agent
 except ModuleNotFoundError:
-    from agent import root_agent
+    from agent import root_agent, search_agent
 
-app = FastAPI(title="Aura Agent")
+app = FastAPI(title="Aura Agent API")
 
 app.add_middleware(
     CORSMiddleware,
@@ -47,52 +51,19 @@ runner = Runner(
     credential_service=credential_service,
 )
 
+adk_search_app = App(name="aura_search", root_agent=search_agent)
+search_runner = Runner(
+    app=adk_search_app,
+    session_service=session_service,
+    artifact_service=artifact_service,
+    credential_service=credential_service,
+)
+
 class ChatRequest(BaseModel):
     message: str
     user_id: str = "default_user"
     session_id: str = "default_session"
-
-@app.post("/chat")
-async def chat(req: ChatRequest):
-    try:
-        session = await session_service.get_session(app_name="aura", user_id=req.user_id, session_id=req.session_id)
-        if not session:
-            session = await session_service.create_session(app_name="aura", user_id=req.user_id, session_id=req.session_id)
-        
-        user_content = types.Content(role="user", parts=[types.Part(text=req.message)])
-        
-        response_text = ""
-        events = []
-        async for event in runner.run_async(user_id=req.user_id, session_id=req.session_id, new_message=user_content):
-            events.append(event)
-            if hasattr(event, 'content') and event.content:
-                if hasattr(event.content, 'parts'):
-                    for part in event.content.parts:
-                        if hasattr(part, 'text') and part.text:
-                            response_text += part.text
-        
-        if not response_text and events:
-            # Extract last model output if present
-            for ev in reversed(events):
-                if getattr(ev, 'role', '') == 'model' or getattr(getattr(ev, 'content', None), 'role', '') == 'model':
-                    content = getattr(ev, 'content', ev)
-                    if hasattr(content, 'parts'):
-                        for part in content.parts:
-                            if hasattr(part, 'text') and part.text:
-                                response_text = part.text
-                                break
-                if response_text:
-                    break
-
-        if not response_text:
-            response_text = "I processed your request, but received no text output."
-
-        return {"response": response_text, "session_id": req.session_id}
-    except Exception as e:
-        err_msg = str(e)
-        if "429" in err_msg or "RESOURCE_EXHAUSTED" in err_msg or "quota" in err_msg.lower():
-            return {"response": "⚠️ Free Tier rate limit reached! Google AI Studio limits free requests to 30 per minute. Please wait 30 seconds and ask again!"}
-        return JSONResponse(status_code=500, content={"error": err_msg})
+    enable_search: bool = False
 
 HTML_CONTENT = """<!DOCTYPE html>
 <html lang="en">
@@ -144,7 +115,10 @@ HTML_CONTENT = """<!DOCTYPE html>
         .bubble { padding: 14px 18px; border-radius: 18px; font-size: 15px; line-height: 1.5; word-wrap: break-word; white-space: pre-wrap; }
         .user .bubble { background: var(--user-bubble); color: var(--text-primary); border-top-right-radius: 4px; }
         .ai .bubble { background: var(--ai-bubble); color: var(--text-primary); border: 1px solid var(--border-color); border-top-left-radius: 4px; }
-        footer { padding: 16px 24px; max-width: 800px; width: 100%; margin: 0 auto; }
+        footer { padding: 16px 24px; max-width: 800px; width: 100%; margin: 0 auto; display: flex; flex-direction: column; gap: 10px; }
+        .controls { display: flex; align-items: center; justify-content: flex-end; gap: 10px; }
+        .search-toggle { font-size: 13px; font-weight: 500; border: 1px solid var(--border-color); padding: 6px 14px; border-radius: 18px; cursor: pointer; background: var(--surface-color); color: var(--text-secondary); transition: all 0.2s; display: flex; align-items: center; gap: 6px; user-select: none; }
+        .search-toggle.active { background: rgba(26, 115, 232, 0.15); color: var(--accent-color); border-color: var(--accent-color); }
         .input-box { display: flex; align-items: center; background: var(--surface-color); border: 1px solid var(--border-color); border-radius: 28px; padding: 8px 16px; transition: border-color 0.2s; }
         .input-box:focus-within { border-color: var(--accent-color); box-shadow: 0 0 0 2px rgba(26,115,232,0.2); }
         input { flex: 1; border: none; background: transparent; color: var(--text-primary); font-size: 16px; padding: 8px; outline: none; }
@@ -161,7 +135,7 @@ HTML_CONTENT = """<!DOCTYPE html>
             <div class="logo-icon"></div>
             <span>Aura</span>
         </div>
-        <div class="status-badge">Powered by Gemini 2.5 Flash</div>
+        <div class="status-badge">Powered by Gemini Flash</div>
     </header>
 
     <div id="chat-container">
@@ -172,6 +146,11 @@ HTML_CONTENT = """<!DOCTYPE html>
     </div>
 
     <footer>
+        <div class="controls">
+            <div class="search-toggle" id="searchToggle" onclick="toggleSearch()">
+                <span>🌐 Web Search: OFF</span>
+            </div>
+        </div>
         <div class="input-box">
             <input type="text" id="userInput" placeholder="Ask Aura anything..." onkeydown="if(event.key==='Enter') sendMessage()">
             <button id="sendBtn" onclick="sendMessage()">
@@ -182,6 +161,19 @@ HTML_CONTENT = """<!DOCTYPE html>
 
     <script>
         const sessionId = "session_" + Math.random().toString(36).substring(2, 9);
+        let webSearchEnabled = false;
+
+        function toggleSearch() {
+            webSearchEnabled = !webSearchEnabled;
+            const toggle = document.getElementById("searchToggle");
+            if (webSearchEnabled) {
+                toggle.classList.add("active");
+                toggle.innerHTML = "<span>🌐 Web Search: ON</span>";
+            } else {
+                toggle.classList.remove("active");
+                toggle.innerHTML = "<span>🌐 Web Search: OFF</span>";
+            }
+        }
         
         async function sendMessage() {
             const input = document.getElementById("userInput");
@@ -199,7 +191,11 @@ HTML_CONTENT = """<!DOCTYPE html>
                 const res = await fetch("/chat", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ message: message, session_id: sessionId })
+                    body: JSON.stringify({ 
+                        message: message, 
+                        session_id: sessionId,
+                        enable_search: webSearchEnabled 
+                    })
                 });
                 const data = await res.json();
                 appendMessage("ai", "A", data.response || data.error || "No response received.");
@@ -237,6 +233,55 @@ HTML_CONTENT = """<!DOCTYPE html>
 @app.api_route("/", methods=["GET", "HEAD"], response_class=HTMLResponse)
 async def get_root():
     return HTML_CONTENT
+
+@app.post("/chat")
+async def chat(req: ChatRequest):
+    try:
+        use_runner = runner
+        app_name = "aura"
+        
+        # Trigger real-time search runner if toggle is enabled or prompt starts with /search
+        if req.enable_search or req.message.startswith("/search"):
+            use_runner = search_runner
+            app_name = "aura_search"
+            
+        session = await session_service.get_session(app_name=app_name, user_id=req.user_id, session_id=req.session_id)
+        if not session:
+            session = await session_service.create_session(app_name=app_name, user_id=req.user_id, session_id=req.session_id)
+        
+        user_content = types.Content(role="user", parts=[types.Part(text=req.message)])
+        
+        response_text = ""
+        events = []
+        async for event in use_runner.run_async(user_id=req.user_id, session_id=req.session_id, new_message=user_content):
+            events.append(event)
+            if hasattr(event, 'content') and event.content:
+                if hasattr(event.content, 'parts'):
+                    for part in event.content.parts:
+                        if hasattr(part, 'text') and part.text:
+                            response_text += part.text
+        
+        if not response_text and events:
+            for ev in reversed(events):
+                if getattr(ev, 'role', '') == 'model' or getattr(getattr(ev, 'content', None), 'role', '') == 'model':
+                    content = getattr(ev, 'content', ev)
+                    if hasattr(content, 'parts'):
+                        for part in content.parts:
+                            if hasattr(part, 'text') and part.text:
+                                response_text = part.text
+                                break
+                if response_text:
+                    break
+
+        if not response_text:
+            response_text = "I processed your request, but received no text output."
+
+        return {"response": response_text, "session_id": req.session_id}
+    except Exception as e:
+        err_msg = str(e)
+        if "429" in err_msg or "RESOURCE_EXHAUSTED" in err_msg or "quota" in err_msg.lower():
+            return {"response": "⚠️ Web Search quota limit reached! Turn OFF Web Search toggle to continue chatting for free, or wait 1 minute!"}
+        return JSONResponse(status_code=500, content={"error": err_msg})
 
 if __name__ == "__main__":
     import uvicorn
