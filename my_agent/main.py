@@ -134,6 +134,8 @@ HTML_CONTENT = """<!DOCTYPE html>
         .right-head { display: flex; align-items: center; gap: 12px; }
         .profile-chip { display: flex; align-items: center; gap: 6px; padding: 5px 12px; background: var(--surface-color); border: 1px solid var(--border-color); border-radius: 16px; font-size: 13px; font-weight: 500; cursor: pointer; color: var(--text-primary); }
         .profile-chip:hover { background: var(--hover-color); }
+        .logout-btn { padding: 5px 12px; background: transparent; border: 1px solid var(--border-color); border-radius: 16px; font-size: 13px; font-weight: 500; cursor: pointer; color: #ea4335; display: none; }
+        .logout-btn:hover { background: rgba(234, 67, 53, 0.1); }
 
         #chat-container { flex: 1; overflow-y: auto; padding: 24px; max-width: 800px; width: 100%; margin: 0 auto; display: flex; flex-direction: column; gap: 20px; }
         .message { display: flex; gap: 12px; max-width: 85%; animation: fadeIn 0.2s ease; }
@@ -160,16 +162,21 @@ HTML_CONTENT = """<!DOCTYPE html>
         .spinner { width: 18px; height: 18px; border: 2px solid #ffffff; border-top: 2px solid transparent; border-radius: 50%; animation: spin 0.8s linear infinite; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
 
-        /* Modal */
-        .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.4); display: none; align-items: center; justify-content: center; z-index: 100; }
+        /* Auth Modal */
+        .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); display: none; align-items: center; justify-content: center; z-index: 100; }
         .modal-overlay.open { display: flex; }
-        .modal { background: var(--bg-color); border: 1px solid var(--border-color); border-radius: 16px; padding: 24px; width: 90%; max-width: 380px; display: flex; flex-direction: column; gap: 16px; }
-        .modal h3 { font-size: 18px; font-weight: 500; }
-        .modal input { border: 1px solid var(--border-color); border-radius: 8px; padding: 10px; font-size: 15px; width: 100%; color: var(--text-primary); background: var(--surface-color); }
-        .modal-btns { display: flex; justify-content: flex-end; gap: 10px; }
-        .btn-flat { padding: 8px 16px; border-radius: 8px; font-size: 14px; font-weight: 500; cursor: pointer; border: none; }
+        .modal { background: var(--bg-color); border: 1px solid var(--border-color); border-radius: 16px; padding: 28px; width: 90%; max-width: 400px; display: flex; flex-direction: column; gap: 16px; }
+        .modal h3 { font-size: 20px; font-weight: 500; }
+        .tab-bar { display: flex; border-bottom: 1px solid var(--border-color); margin-bottom: 4px; }
+        .tab { flex: 1; text-align: center; padding: 8px; font-size: 14px; font-weight: 500; cursor: pointer; border-bottom: 2px solid transparent; color: var(--text-secondary); }
+        .tab.active { border-color: var(--accent-color); color: var(--accent-color); }
+        .modal input { border: 1px solid var(--border-color); border-radius: 8px; padding: 10px 14px; font-size: 15px; width: 100%; color: var(--text-primary); background: var(--surface-color); outline: none; }
+        .modal input:focus { border-color: var(--accent-color); }
+        .modal-btns { display: flex; justify-content: flex-end; gap: 10px; margin-top: 8px; }
+        .btn-flat { padding: 10px 18px; border-radius: 8px; font-size: 14px; font-weight: 500; cursor: pointer; border: none; }
         .btn-secondary { background: var(--surface-color); color: var(--text-primary); border: 1px solid var(--border-color); }
         .btn-primary { background: var(--accent-color); color: white; }
+        .auth-error { color: #ea4335; font-size: 13px; display: none; }
     </style>
 </head>
 <body>
@@ -194,10 +201,11 @@ HTML_CONTENT = """<!DOCTYPE html>
                 </div>
             </div>
             <div class="right-head">
-                <div class="profile-chip" onclick="openProfileModal()">
+                <div class="profile-chip" id="profileChip" onclick="openAuthModal()">
                     <span>👤</span>
-                    <span id="profileName">User</span>
+                    <span id="profileName">Sign In / Register</span>
                 </div>
+                <button class="logout-btn" id="logoutBtn" onclick="handleLogout()">Log Out</button>
             </div>
         </header>
 
@@ -218,25 +226,73 @@ HTML_CONTENT = """<!DOCTYPE html>
         </footer>
     </div>
 
-    <!-- Profile Modal -->
-    <div class="modal-overlay" id="profileModal">
+    <!-- Auth Modal -->
+    <div class="modal-overlay" id="authModal">
         <div class="modal">
-            <h3>Switch Account / Profile</h3>
-            <input type="text" id="profileInput" placeholder="Enter display name (e.g. Kavish)">
+            <div class="tab-bar">
+                <div class="tab active" id="tabLogin" onclick="switchAuthTab('login')">Log In</div>
+                <div class="tab" id="tabSignup" onclick="switchAuthTab('signup')">Sign Up</div>
+            </div>
+            <div id="signupFields" style="display: none;">
+                <input type="text" id="authName" placeholder="Full Name or Username" style="margin-bottom: 10px;">
+            </div>
+            <input type="email" id="authEmail" placeholder="Email address" style="margin-bottom: 10px;">
+            <input type="password" id="authPassword" placeholder="Password (6+ characters)">
+            <div class="auth-error" id="authError"></div>
             <div class="modal-btns">
-                <button class="btn-flat btn-secondary" onclick="closeProfileModal()">Cancel</button>
-                <button class="btn-flat btn-primary" onclick="saveProfile()">Save Profile</button>
+                <button class="btn-flat btn-secondary" onclick="closeAuthModal()">Cancel</button>
+                <button class="btn-flat btn-primary" id="authSubmitBtn" onclick="handleAuthSubmit()">Log In</button>
             </div>
         </div>
     </div>
 
-    <script>
-        let currentProfile = localStorage.getItem("aura_user_profile") || "Default User";
-        let sessions = JSON.parse(localStorage.getItem(`aura_sessions_${currentProfile}`)) || [];
-        let activeSessionId = localStorage.getItem(`aura_active_session_${currentProfile}`) || null;
-        let webSearchEnabled = false;
+    <!-- Firebase App & Auth SDK (Project: fir-fb9da) -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+        import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, updateProfile } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
-        document.getElementById("profileName").innerText = currentProfile;
+        // Firebase Configuration for project fir-fb9da
+        const firebaseConfig = {
+            apiKey: "AIzaSy_FIR_FB9DA_DEFAULT_KEY",
+            authDomain: "fir-fb9da.firebaseapp.com",
+            projectId: "fir-fb9da",
+            storageBucket: "fir-fb9da.appspot.com",
+            messagingSenderId: "109827364512",
+            appId: "1:109827364512:web:ab89102c7f"
+        };
+
+        const fbApp = initializeApp(firebaseConfig);
+        const auth = getAuth(fbApp);
+
+        window.fbAuth = auth;
+        window.fbCreateUser = createUserWithEmailAndPassword;
+        window.fbSignIn = signInWithEmailAndPassword;
+        window.fbSignOut = signOut;
+        window.fbUpdateProfile = updateProfile;
+
+        onAuthStateChanged(auth, (user) => {
+            if (user) {
+                window.currentUser = {
+                    uid: user.uid,
+                    displayName: user.displayName || user.email.split('@')[0],
+                    email: user.email
+                };
+                document.getElementById("profileName").innerText = window.currentUser.displayName;
+                document.getElementById("logoutBtn").style.display = "block";
+            } else {
+                window.currentUser = null;
+                document.getElementById("profileName").innerText = "Sign In / Register";
+                document.getElementById("logoutBtn").style.display = "none";
+            }
+            window.loadUserSessions();
+        });
+    </script>
+
+    <script>
+        let currentAuthMode = "login";
+        let sessions = [];
+        let activeSessionId = null;
+        let webSearchEnabled = false;
 
         function toggleSidebar() {
             document.getElementById("sidebar").classList.toggle("collapsed");
@@ -254,33 +310,78 @@ HTML_CONTENT = """<!DOCTYPE html>
             }
         }
 
-        function openProfileModal() {
-            document.getElementById("profileInput").value = currentProfile;
-            document.getElementById("profileModal").classList.add("open");
+        function openAuthModal() {
+            document.getElementById("authError").style.display = "none";
+            document.getElementById("authModal").classList.add("open");
         }
 
-        function closeProfileModal() {
-            document.getElementById("profileModal").classList.remove("open");
+        function closeAuthModal() {
+            document.getElementById("authModal").classList.remove("open");
         }
 
-        function saveProfile() {
-            const name = document.getElementById("profileInput").value.trim();
-            if (!name) return;
-            currentProfile = name;
-            localStorage.setItem("aura_user_profile", currentProfile);
-            document.getElementById("profileName").innerText = currentProfile;
-            
-            sessions = JSON.parse(localStorage.getItem(`aura_sessions_${currentProfile}`)) || [];
-            activeSessionId = localStorage.getItem(`aura_active_session_${currentProfile}`) || null;
-            
-            closeProfileModal();
+        function switchAuthTab(mode) {
+            currentAuthMode = mode;
+            document.getElementById("authError").style.display = "none";
+            if (mode === "signup") {
+                document.getElementById("tabSignup").classList.add("active");
+                document.getElementById("tabLogin").classList.remove("active");
+                document.getElementById("signupFields").style.display = "block";
+                document.getElementById("authSubmitBtn").innerText = "Sign Up";
+            } else {
+                document.getElementById("tabLogin").classList.add("active");
+                document.getElementById("tabSignup").classList.remove("active");
+                document.getElementById("signupFields").style.display = "none";
+                document.getElementById("authSubmitBtn").innerText = "Log In";
+            }
+        }
+
+        async function handleAuthSubmit() {
+            const email = document.getElementById("authEmail").value.trim();
+            const password = document.getElementById("authPassword").value;
+            const name = document.getElementById("authName").value.trim();
+            const errDiv = document.getElementById("authError");
+            errDiv.style.display = "none";
+
+            if (!email || !password) {
+                errDiv.innerText = "Please enter email and password.";
+                errDiv.style.display = "block";
+                return;
+            }
+
+            try {
+                if (currentAuthMode === "signup") {
+                    const res = await window.fbCreateUser(window.fbAuth, email, password);
+                    if (name && res.user) {
+                        await window.fbUpdateProfile(res.user, { displayName: name });
+                    }
+                } else {
+                    await window.fbSignIn(window.fbAuth, email, password);
+                }
+                closeAuthModal();
+            } catch (err) {
+                errDiv.innerText = err.message.replace("Firebase: ", "");
+                errDiv.style.display = "block";
+            }
+        }
+
+        async function handleLogout() {
+            if (window.fbSignOut && window.fbAuth) {
+                await window.fbSignOut(window.fbAuth);
+            }
+        }
+
+        window.loadUserSessions = function() {
+            const userId = window.currentUser ? window.currentUser.uid : "guest";
+            sessions = JSON.parse(localStorage.getItem(`aura_fb_sessions_${userId}`)) || [];
+            activeSessionId = localStorage.getItem(`aura_fb_active_${userId}`) || null;
+
             if (!activeSessionId || !sessions.find(s => s.id === activeSessionId)) {
                 startNewChat();
             } else {
                 renderSidebar();
                 loadActiveSession();
             }
-        }
+        };
 
         function startNewChat() {
             activeSessionId = "sess_" + Math.random().toString(36).substring(2, 9);
@@ -292,8 +393,9 @@ HTML_CONTENT = """<!DOCTYPE html>
         }
 
         function saveState() {
-            localStorage.setItem(`aura_sessions_${currentProfile}`, JSON.stringify(sessions));
-            localStorage.setItem(`aura_active_session_${currentProfile}`, activeSessionId);
+            const userId = window.currentUser ? window.currentUser.uid : "guest";
+            localStorage.setItem(`aura_fb_sessions_${userId}`, JSON.stringify(sessions));
+            localStorage.setItem(`aura_fb_active_${userId}`, activeSessionId);
         }
 
         function renderSidebar() {
@@ -349,8 +451,9 @@ HTML_CONTENT = """<!DOCTYPE html>
                 appendMessageToDOM("ai", "A", "Hello! I am Aura, your AI assistant. How can I help you today?");
                 return;
             }
+            const userInitial = window.currentUser ? window.currentUser.displayName[0].toUpperCase() : "U";
             currentSess.messages.forEach(msg => {
-                appendMessageToDOM(msg.sender, msg.sender === 'user' ? currentProfile[0].toUpperCase() : 'A', msg.text);
+                appendMessageToDOM(msg.sender, msg.sender === 'user' ? userInitial : 'A', msg.text);
             });
         }
 
@@ -371,8 +474,9 @@ HTML_CONTENT = """<!DOCTYPE html>
                 currentSess.title = message.substring(0, 24) + (message.length > 24 ? "..." : "");
             }
 
+            const userInitial = window.currentUser ? window.currentUser.displayName[0].toUpperCase() : "U";
             currentSess.messages.push({ sender: "user", text: message });
-            appendMessageToDOM("user", currentProfile[0].toUpperCase(), message);
+            appendMessageToDOM("user", userInitial, message);
             saveState();
             renderSidebar();
 
@@ -380,12 +484,13 @@ HTML_CONTENT = """<!DOCTYPE html>
             btn.innerHTML = '<div class="spinner"></div>';
 
             try {
+                const userId = window.currentUser ? window.currentUser.uid : "guest";
                 const res = await fetch("/chat", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({ 
                         message: message, 
-                        user_id: currentProfile,
+                        user_id: userId,
                         session_id: activeSessionId,
                         enable_search: webSearchEnabled 
                     })
@@ -422,13 +527,8 @@ HTML_CONTENT = """<!DOCTYPE html>
             container.scrollTop = container.scrollHeight;
         }
 
-        // Init
-        if (!activeSessionId || !sessions.find(s => s.id === activeSessionId)) {
-            startNewChat();
-        } else {
-            renderSidebar();
-            loadActiveSession();
-        }
+        // Default initial setup
+        window.loadUserSessions();
     </script>
 </body>
 </html>
