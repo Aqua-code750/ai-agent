@@ -89,7 +89,10 @@ async def chat(req: ChatRequest):
 
         return {"response": response_text, "session_id": req.session_id}
     except Exception as e:
-        return JSONResponse(status_code=500, content={"error": str(e)})
+        err_msg = str(e)
+        if "429" in err_msg or "RESOURCE_EXHAUSTED" in err_msg or "quota" in err_msg.lower():
+            return {"response": "⚠️ Free Tier rate limit reached! Google AI Studio limits free requests to 30 per minute. Please wait 30 seconds and ask again!"}
+        return JSONResponse(status_code=500, content={"error": err_msg})
 
 HTML_CONTENT = """<!DOCTYPE html>
 <html lang="en">
