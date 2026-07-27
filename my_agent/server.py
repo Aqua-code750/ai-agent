@@ -199,7 +199,7 @@ HTML_CONTENT = """<!DOCTYPE html>
 """
 
 @app.api_route("/", methods=["GET", "HEAD"], response_class=HTMLResponse)
-async function get_root():
+async def get_root():
     return HTML_CONTENT
 
 @app.post("/chat")
