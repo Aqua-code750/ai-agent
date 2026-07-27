@@ -158,7 +158,7 @@ HTML_CONTENT = """<!DOCTYPE html>
             <div class="logo-icon"></div>
             <span>Aura</span>
         </div>
-        <div class="status-badge">Powered by Gemini 3.6 Flash</div>
+        <div class="status-badge">Powered by Gemini 3.5 Flash</div>
     </header>
 
     <div id="chat-container">
