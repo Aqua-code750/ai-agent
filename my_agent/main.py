@@ -253,12 +253,13 @@ HTML_CONTENT = """<!DOCTYPE html>
 
         // Firebase Configuration for project fir-fb9da
         const firebaseConfig = {
-            apiKey: "AIzaSy_FIR_FB9DA_DEFAULT_KEY",
+            apiKey: "AIzaSyDepR3o-75rgL4Ah5MXGZtFoDJFCk2BEB4",
             authDomain: "fir-fb9da.firebaseapp.com",
             projectId: "fir-fb9da",
-            storageBucket: "fir-fb9da.appspot.com",
-            messagingSenderId: "109827364512",
-            appId: "1:109827364512:web:ab89102c7f"
+            storageBucket: "fir-fb9da.firebasestorage.app",
+            messagingSenderId: "606836149753",
+            appId: "1:606836149753:web:bb8b8ea9ed705680528128",
+            measurementId: "G-PW22WVC6L1"
         };
 
         const fbApp = initializeApp(firebaseConfig);
