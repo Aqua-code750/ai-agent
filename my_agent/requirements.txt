@@ -6,3 +6,4 @@ google-genai
 google-cloud-aiplatform
 duckduckgo-search
 python-multipart
+python-dotenv
