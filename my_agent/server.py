@@ -69,8 +69,8 @@ HTML_CONTENT = """<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Aura - Gemini Assistant</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Aura - Mobile & Desktop AI Assistant</title>
     <link href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;700&family=Roboto:wght@400;500&display=swap" rel="stylesheet">
     <style>
         :root {
@@ -105,81 +105,96 @@ HTML_CONTENT = """<!DOCTYPE html>
                 --hover-color: #2a2b2d;
             }
         }
-        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Google Sans', 'Roboto', sans-serif; }
-        body { background-color: var(--bg-color); color: var(--text-primary); height: 100vh; display: flex; overflow: hidden; }
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Google Sans', 'Roboto', sans-serif; -webkit-tap-highlight-color: transparent; }
+        body { background-color: var(--bg-color); color: var(--text-primary); height: 100vh; height: 100dvh; display: flex; overflow: hidden; position: fixed; width: 100%; }
         
-        /* Sidebar */
-        #sidebar { width: 260px; background: var(--sidebar-color); border-right: 1px solid var(--border-color); display: flex; flex-direction: column; transition: transform 0.3s ease; flex-shrink: 0; z-index: 10; }
-        #sidebar.collapsed { transform: translateX(-260px); margin-right: -260px; }
+        /* Mobile Overlay Backdrop */
+        #sidebarBackdrop { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.4); z-index: 99; display: none; opacity: 0; transition: opacity 0.3s ease; }
+        #sidebarBackdrop.open { display: block; opacity: 1; }
+
+        /* Sidebar Drawer */
+        #sidebar { width: 280px; background: var(--sidebar-color); border-right: 1px solid var(--border-color); display: flex; flex-direction: column; transition: transform 0.3s ease, margin-right 0.3s ease; flex-shrink: 0; z-index: 100; }
         .sidebar-header { padding: 16px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border-color); }
-        .new-chat-btn { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; padding: 10px 16px; background: var(--accent-color); color: white; border: none; border-radius: 20px; font-weight: 500; font-size: 14px; cursor: pointer; transition: background 0.2s; }
+        .new-chat-btn { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; padding: 12px 16px; background: var(--accent-color); color: white; border: none; border-radius: 24px; font-weight: 500; font-size: 14px; cursor: pointer; transition: background 0.2s; min-height: 44px; }
         .new-chat-btn:hover { background: var(--accent-hover); }
         .chat-list { flex: 1; overflow-y: auto; padding: 12px 8px; display: flex; flex-direction: column; gap: 4px; }
-        .chat-item { padding: 10px 12px; border-radius: 10px; font-size: 14px; color: var(--text-primary); cursor: pointer; display: flex; align-items: center; justify-content: space-between; transition: background 0.2s; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .chat-item { padding: 12px 14px; border-radius: 12px; font-size: 14px; color: var(--text-primary); cursor: pointer; display: flex; align-items: center; justify-content: space-between; transition: background 0.2s; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-height: 44px; }
         .chat-item:hover { background: var(--hover-color); }
         .chat-item.active { background: var(--user-bubble); font-weight: 500; color: var(--accent-color); }
-        .delete-chat { opacity: 0; color: var(--text-secondary); padding: 4px; border-radius: 50%; border: none; background: transparent; cursor: pointer; }
-        .chat-item:hover .delete-chat { opacity: 1; }
-        .delete-chat:hover { color: #ea4335; }
+        .delete-chat { color: var(--text-secondary); padding: 6px; border-radius: 50%; border: none; background: transparent; cursor: pointer; min-width: 32px; min-height: 32px; display: flex; align-items: center; justify-content: center; }
+        .delete-chat:hover { color: #ea4335; background: var(--hover-color); }
+
+        /* Desktop Sidebar behavior */
+        @media (min-width: 769px) {
+            #sidebar.collapsed { transform: translateX(-280px); margin-right: -280px; }
+        }
+
+        /* Mobile Responsive Sidebar behavior */
+        @media (max-width: 768px) {
+            #sidebar { position: fixed; top: 0; left: 0; bottom: 0; height: 100dvh; transform: translateX(-100%); box-shadow: none; }
+            #sidebar.open { transform: translateX(0); box-shadow: 4px 0 24px rgba(0,0,0,0.25); }
+        }
 
         /* Main Content */
-        #main-wrapper { flex: 1; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
-        header { padding: 12px 20px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border-color); background: var(--surface-color); }
-        .left-head { display: flex; align-items: center; gap: 14px; }
-        .icon-btn { background: transparent; border: none; color: var(--text-primary); cursor: pointer; padding: 6px; border-radius: 50%; display: flex; align-items: center; justify-content: center; }
+        #main-wrapper { flex: 1; display: flex; flex-direction: column; height: 100vh; height: 100dvh; overflow: hidden; width: 100%; }
+        header { padding: 12px 16px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border-color); background: var(--surface-color); min-height: 56px; }
+        .left-head { display: flex; align-items: center; gap: 10px; }
+        .icon-btn { background: transparent; border: none; color: var(--text-primary); cursor: pointer; padding: 8px; border-radius: 50%; display: flex; align-items: center; justify-content: center; min-width: 40px; min-height: 40px; }
         .icon-btn:hover { background: var(--hover-color); }
-        .logo { display: flex; align-items: center; gap: 10px; font-size: 18px; font-weight: 500; }
-        .logo-icon { width: 22px; height: 22px; background: var(--accent-color); border-radius: 4px; display: flex; align-items: center; justify-content: center; color: white; font-weight: 700; font-size: 13px; }
+        .logo { display: flex; align-items: center; gap: 8px; font-size: 18px; font-weight: 500; }
+        .logo-icon { width: 24px; height: 24px; background: var(--accent-color); border-radius: 6px; display: flex; align-items: center; justify-content: center; color: white; font-weight: 700; font-size: 13px; }
         
-        .right-head { display: flex; align-items: center; gap: 12px; }
-        .profile-chip { display: flex; align-items: center; gap: 6px; padding: 5px 12px; background: var(--surface-color); border: 1px solid var(--border-color); border-radius: 16px; font-size: 13px; font-weight: 500; cursor: pointer; color: var(--text-primary); }
+        .right-head { display: flex; align-items: center; gap: 8px; }
+        .profile-chip { display: flex; align-items: center; gap: 6px; padding: 6px 12px; background: var(--surface-color); border: 1px solid var(--border-color); border-radius: 18px; font-size: 13px; font-weight: 500; cursor: pointer; color: var(--text-primary); max-width: 140px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-height: 36px; }
         .profile-chip:hover { background: var(--hover-color); }
-        .logout-btn { padding: 5px 12px; background: transparent; border: 1px solid var(--border-color); border-radius: 16px; font-size: 13px; font-weight: 500; cursor: pointer; color: #ea4335; display: none; }
+        .logout-btn { padding: 6px 12px; background: transparent; border: 1px solid var(--border-color); border-radius: 18px; font-size: 13px; font-weight: 500; cursor: pointer; color: #ea4335; display: none; min-height: 36px; }
         .logout-btn:hover { background: rgba(234, 67, 53, 0.1); }
 
-        #chat-container { flex: 1; overflow-y: auto; padding: 24px; max-width: 800px; width: 100%; margin: 0 auto; display: flex; flex-direction: column; gap: 20px; }
-        .message { display: flex; gap: 12px; max-width: 85%; animation: fadeIn 0.2s ease; }
+        #chat-container { flex: 1; overflow-y: auto; padding: 16px 12px; max-width: 800px; width: 100%; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; -webkit-overflow-scrolling: touch; }
+        .message { display: flex; gap: 10px; max-width: 90%; animation: fadeIn 0.2s ease; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
         .message.user { align-self: flex-end; flex-direction: row-reverse; }
-        .avatar { width: 34px; height: 34px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; color: white; flex-shrink: 0; }
+        .avatar { width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; color: white; flex-shrink: 0; }
         .user .avatar { background: var(--user-avatar-bg); }
         .ai .avatar { background: var(--ai-avatar-bg); }
-        .bubble { padding: 14px 18px; border-radius: 16px; font-size: 15px; line-height: 1.5; word-wrap: break-word; white-space: pre-wrap; border: 1px solid var(--border-color); }
+        .bubble { padding: 12px 16px; border-radius: 18px; font-size: 15px; line-height: 1.5; word-wrap: break-word; white-space: pre-wrap; border: 1px solid var(--border-color); }
         .user .bubble { background: var(--user-bubble); border: none; border-top-right-radius: 4px; }
         .ai .bubble { background: var(--ai-bubble); border-top-left-radius: 4px; }
 
-        footer { padding: 16px 24px; max-width: 800px; width: 100%; margin: 0 auto; display: flex; flex-direction: column; gap: 10px; }
-        .controls { display: flex; align-items: center; justify-content: flex-end; gap: 10px; }
-        .search-toggle { font-size: 13px; font-weight: 500; border: 1px solid var(--border-color); padding: 6px 14px; border-radius: 18px; cursor: pointer; background: var(--surface-color); color: var(--text-secondary); transition: all 0.2s; display: flex; align-items: center; gap: 6px; user-select: none; }
+        footer { padding: 10px 14px calc(10px + env(safe-area-inset-bottom, 0px)); max-width: 800px; width: 100%; margin: 0 auto; display: flex; flex-direction: column; gap: 8px; background: var(--bg-color); }
+        .controls { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
+        .search-toggle { font-size: 12px; font-weight: 500; border: 1px solid var(--border-color); padding: 5px 12px; border-radius: 16px; cursor: pointer; background: var(--surface-color); color: var(--text-secondary); transition: all 0.2s; display: flex; align-items: center; gap: 4px; user-select: none; min-height: 32px; }
         .search-toggle.active { background: rgba(26, 115, 232, 0.15); color: var(--accent-color); border-color: var(--accent-color); }
         
-        .input-box { display: flex; align-items: center; background: var(--surface-color); border: 1px solid var(--border-color); border-radius: 28px; padding: 6px 14px; transition: border-color 0.2s; }
+        .input-box { display: flex; align-items: center; background: var(--surface-color); border: 1px solid var(--border-color); border-radius: 24px; padding: 4px 8px 4px 14px; transition: border-color 0.2s; min-height: 48px; }
         .input-box:focus-within { border-color: var(--accent-color); box-shadow: 0 0 0 2px rgba(26,115,232,0.15); }
-        input { flex: 1; border: none; background: transparent; color: var(--text-primary); font-size: 16px; padding: 8px; outline: none; }
-        .send-btn { background: var(--accent-color); color: white; border: none; width: 36px; height: 36px; border-radius: 50%; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: background 0.2s; flex-shrink: 0; }
+        input { flex: 1; border: none; background: transparent; color: var(--text-primary); font-size: 16px; padding: 8px 4px; outline: none; width: 100%; }
+        .send-btn { background: var(--accent-color); color: white; border: none; width: 38px; height: 38px; border-radius: 50%; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: background 0.2s; flex-shrink: 0; }
         .send-btn:hover { background: var(--accent-hover); }
         .send-btn:disabled { opacity: 0.5; cursor: not-allowed; }
         .spinner { width: 18px; height: 18px; border: 2px solid #ffffff; border-top: 2px solid transparent; border-radius: 50%; animation: spin 0.8s linear infinite; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
 
-        /* Auth Modal */
-        .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); display: none; align-items: center; justify-content: center; z-index: 100; }
+        /* Auth Modal Mobile Optimized */
+        .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); display: none; align-items: center; justify-content: center; z-index: 2000; padding: 16px; }
         .modal-overlay.open { display: flex; }
-        .modal { background: var(--bg-color); border: 1px solid var(--border-color); border-radius: 16px; padding: 28px; width: 90%; max-width: 400px; display: flex; flex-direction: column; gap: 16px; }
-        .modal h3 { font-size: 20px; font-weight: 500; }
+        .modal { background: var(--bg-color); border: 1px solid var(--border-color); border-radius: 20px; padding: 24px 20px; width: 100%; max-width: 380px; display: flex; flex-direction: column; gap: 14px; box-shadow: 0 8px 32px rgba(0,0,0,0.2); }
+        .modal h3 { font-size: 18px; font-weight: 500; }
         .tab-bar { display: flex; border-bottom: 1px solid var(--border-color); margin-bottom: 4px; }
-        .tab { flex: 1; text-align: center; padding: 8px; font-size: 14px; font-weight: 500; cursor: pointer; border-bottom: 2px solid transparent; color: var(--text-secondary); }
+        .tab { flex: 1; text-align: center; padding: 10px; font-size: 14px; font-weight: 500; cursor: pointer; border-bottom: 2px solid transparent; color: var(--text-secondary); min-height: 44px; }
         .tab.active { border-color: var(--accent-color); color: var(--accent-color); }
-        .modal input { border: 1px solid var(--border-color); border-radius: 8px; padding: 10px 14px; font-size: 15px; width: 100%; color: var(--text-primary); background: var(--surface-color); outline: none; }
+        .modal input { border: 1px solid var(--border-color); border-radius: 12px; padding: 12px 14px; font-size: 16px; width: 100%; color: var(--text-primary); background: var(--surface-color); outline: none; }
         .modal input:focus { border-color: var(--accent-color); }
         .modal-btns { display: flex; justify-content: flex-end; gap: 10px; margin-top: 8px; }
-        .btn-flat { padding: 10px 18px; border-radius: 8px; font-size: 14px; font-weight: 500; cursor: pointer; border: none; }
+        .btn-flat { padding: 12px 20px; border-radius: 12px; font-size: 14px; font-weight: 500; cursor: pointer; border: none; min-height: 44px; }
         .btn-secondary { background: var(--surface-color); color: var(--text-primary); border: 1px solid var(--border-color); }
         .btn-primary { background: var(--accent-color); color: white; }
         .auth-error { color: #ea4335; font-size: 13px; display: none; }
     </style>
 </head>
 <body>
+    <div id="sidebarBackdrop" onclick="closeSidebar()"></div>
+
     <div id="sidebar">
         <div class="sidebar-header">
             <button class="new-chat-btn" onclick="startNewChat()">
@@ -193,7 +208,7 @@ HTML_CONTENT = """<!DOCTYPE html>
         <header>
             <div class="left-head">
                 <button class="icon-btn" onclick="toggleSidebar()" title="Toggle Sidebar">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
                 </button>
                 <div class="logo">
                     <div class="logo-icon">A</div>
@@ -203,7 +218,7 @@ HTML_CONTENT = """<!DOCTYPE html>
             <div class="right-head">
                 <div class="profile-chip" id="profileChip" onclick="openAuthModal()">
                     <span>👤</span>
-                    <span id="profileName">Sign In / Register</span>
+                    <span id="profileName">Sign In</span>
                 </div>
                 <button class="logout-btn" id="logoutBtn" onclick="handleLogout()">Log Out</button>
             </div>
@@ -282,7 +297,7 @@ HTML_CONTENT = """<!DOCTYPE html>
                 document.getElementById("logoutBtn").style.display = "block";
             } else {
                 window.currentUser = null;
-                document.getElementById("profileName").innerText = "Sign In / Register";
+                document.getElementById("profileName").innerText = "Sign In";
                 document.getElementById("logoutBtn").style.display = "none";
             }
             window.loadUserSessions();
@@ -295,8 +310,30 @@ HTML_CONTENT = """<!DOCTYPE html>
         let activeSessionId = null;
         let webSearchEnabled = false;
 
+        function isMobile() {
+            return window.innerWidth <= 768;
+        }
+
         function toggleSidebar() {
-            document.getElementById("sidebar").classList.toggle("collapsed");
+            const sidebar = document.getElementById("sidebar");
+            const backdrop = document.getElementById("sidebarBackdrop");
+            if (isMobile()) {
+                sidebar.classList.toggle("open");
+                if (sidebar.classList.contains("open")) {
+                    backdrop.classList.add("open");
+                } else {
+                    backdrop.classList.remove("open");
+                }
+            } else {
+                sidebar.classList.toggle("collapsed");
+            }
+        }
+
+        function closeSidebar() {
+            const sidebar = document.getElementById("sidebar");
+            const backdrop = document.getElementById("sidebarBackdrop");
+            sidebar.classList.remove("open");
+            backdrop.classList.remove("open");
         }
 
         function toggleSearch() {
@@ -391,6 +428,7 @@ HTML_CONTENT = """<!DOCTYPE html>
             saveState();
             renderSidebar();
             loadActiveSession();
+            if (isMobile()) closeSidebar();
         }
 
         function saveState() {
@@ -428,6 +466,7 @@ HTML_CONTENT = """<!DOCTYPE html>
             saveState();
             renderSidebar();
             loadActiveSession();
+            if (isMobile()) closeSidebar();
         }
 
         function deleteSession(id) {
@@ -527,6 +566,10 @@ HTML_CONTENT = """<!DOCTYPE html>
             container.appendChild(msgDiv);
             container.scrollTop = container.scrollHeight;
         }
+
+        window.addEventListener("resize", () => {
+            if (!isMobile()) closeSidebar();
+        });
 
         // Default initial setup
         window.loadUserSessions();
