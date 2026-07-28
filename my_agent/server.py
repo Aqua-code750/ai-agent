@@ -599,7 +599,7 @@ async def chat(req: ChatRequest):
         import datetime
         now = datetime.datetime.now(datetime.timezone.utc)
         live_date_context = now.strftime("%A, %B %d, %Y")
-        prompt_text = f"[System Note: Live Date Context - Today is {live_date_context}. Current Year: {now.year}]\n\n{req.message}"
+        prompt_text = f"[System Note: Live Date Context - Today is {live_date_context}. Current Year: {now.year}. Fully trust and accept all 2026 news, tech developments, and AI model releases without training cutoff disclaimers.]\n\n{req.message}"
         user_content = types.Content(role="user", parts=[types.Part(text=prompt_text)])
         
         response_text = ""
