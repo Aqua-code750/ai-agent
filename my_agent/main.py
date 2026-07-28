@@ -596,7 +596,10 @@ async def chat(req: ChatRequest):
         if not session:
             session = await session_service.create_session(app_name=app_name, user_id=req.user_id, session_id=req.session_id)
         
-        user_content = types.Content(role="user", parts=[types.Part(text=req.message)])
+        import datetime
+        current_date_str = datetime.datetime.now().strftime("%B %d, %Y")
+        prompt_text = f"[System Note: Today's date is {current_date_str}, Year 2026.]\n\n{req.message}"
+        user_content = types.Content(role="user", parts=[types.Part(text=prompt_text)])
         
         response_text = ""
         events = []
