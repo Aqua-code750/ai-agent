@@ -663,18 +663,26 @@ async def chat(req: ChatRequest):
                             if hasattr(part, 'text') and part.text:
                                 response_text += part.text
         except Exception as run_err:
-            if ("429" in str(run_err) or "RESOURCE_EXHAUSTED" in str(run_err) or "quota" in str(run_err).lower()) and use_runner == search_runner:
-                fallback_session = await session_service.get_session(app_name="aura", user_id=req.user_id, session_id=req.session_id)
-                if not fallback_session:
-                    fallback_session = await session_service.create_session(app_name="aura", user_id=req.user_id, session_id=req.session_id)
-                async for event in runner.run_async(user_id=req.user_id, session_id=req.session_id, new_message=user_content):
-                    if hasattr(event, 'content') and event.content:
-                        if hasattr(event.content, 'parts'):
-                            for part in event.content.parts:
-                                if hasattr(part, 'text') and part.text:
-                                    response_text += part.text
-                if response_text:
-                    response_text = "*(Note: Live Search daily quota limit reached, answered using core knowledge mode)*\n\n" + response_text
+            err_str = str(run_err)
+            if "429" in err_str or "RESOURCE_EXHAUSTED" in err_str or "quota" in err_str.lower():
+                if use_runner != runner:
+                    try:
+                        fallback_session = await session_service.get_session(app_name="aura", user_id=req.user_id, session_id=req.session_id)
+                        if not fallback_session:
+                            fallback_session = await session_service.create_session(app_name="aura", user_id=req.user_id, session_id=req.session_id)
+                        async for event in runner.run_async(user_id=req.user_id, session_id=req.session_id, new_message=user_content):
+                            if hasattr(event, 'content') and event.content:
+                                if hasattr(event.content, 'parts'):
+                                    for part in event.content.parts:
+                                        if hasattr(part, 'text') and part.text:
+                                            response_text += part.text
+                        if response_text:
+                            note = "*(Live Search quota limit reached, answered using fast core mode)*\n\n" if use_runner == search_runner else "*(High-demand mode quota reached, answered using fast core mode)*\n\n"
+                            response_text = note + response_text
+                    except Exception:
+                        response_text = "⚠️ Rate limit reached! Please wait 30 seconds and try again!"
+                else:
+                    response_text = "⚠️ Rate limit reached! Please wait 30 seconds and try again!"
             else:
                 raise run_err
         
