@@ -61,6 +61,8 @@ class ChatRequest(BaseModel):
     session_id: str = "default_session"
     enable_search: bool = False
     mode: str = "chat"  # "chat", "image", "code", "search"
+    image_base64: str | None = None
+    image_mime_type: str | None = None
 
 HTML_CONTENT = """<!DOCTYPE html>
 <html lang="en">
@@ -160,14 +162,20 @@ HTML_CONTENT = """<!DOCTYPE html>
 
         footer { padding: 10px 14px calc(10px + env(safe-area-inset-bottom, 0px)); max-width: 800px; width: 100%; margin: 0 auto; display: flex; flex-direction: column; gap: 8px; background: var(--bg-color); }
         
-        /* Mode Selector Pills */
         .mode-bar { display: flex; align-items: center; gap: 6px; overflow-x: auto; padding-bottom: 2px; -webkit-overflow-scrolling: touch; }
         .mode-pill { font-size: 12px; font-weight: 500; border: 1px solid var(--border-color); padding: 6px 14px; border-radius: 16px; cursor: pointer; background: var(--surface-color); color: var(--text-secondary); transition: all 0.2s; display: flex; align-items: center; gap: 5px; user-select: none; flex-shrink: 0; min-height: 32px; }
         .mode-pill.active { background: rgba(26, 115, 232, 0.15); color: var(--accent-color); border-color: var(--accent-color); font-weight: 700; }
 
-        .input-box { display: flex; align-items: center; background: var(--surface-color); border: 1px solid var(--border-color); border-radius: 24px; padding: 4px 8px 4px 14px; transition: border-color 0.2s; min-height: 48px; }
+        #imagePreviewContainer { display: none; align-items: center; gap: 10px; padding: 6px 12px; background: var(--surface-color); border: 1px solid var(--border-color); border-radius: 12px; width: max-content; max-width: 100%; }
+        #imagePreviewContainer img { width: 44px; height: 44px; border-radius: 8px; object-fit: cover; }
+        #imagePreviewContainer button { background: transparent; border: none; color: #ea4335; font-size: 16px; cursor: pointer; padding: 4px; }
+
+        .input-box { display: flex; align-items: center; background: var(--surface-color); border: 1px solid var(--border-color); border-radius: 24px; padding: 4px 8px 4px 8px; transition: border-color 0.2s; min-height: 48px; gap: 4px; }
         .input-box:focus-within { border-color: var(--accent-color); box-shadow: 0 0 0 2px rgba(26,115,232,0.15); }
-        input { flex: 1; border: none; background: transparent; color: var(--text-primary); font-size: 16px; padding: 8px 4px; outline: none; width: 100%; }
+        input[type="text"] { flex: 1; border: none; background: transparent; color: var(--text-primary); font-size: 16px; padding: 8px 4px; outline: none; width: 100%; }
+        .attach-btn { background: transparent; border: none; color: var(--text-secondary); padding: 8px; border-radius: 50%; cursor: pointer; display: flex; align-items: center; justify-content: center; width: 36px; height: 36px; }
+        .attach-btn:hover { background: var(--hover-color); color: var(--accent-color); }
+
         .send-btn { background: var(--accent-color); color: white; border: none; width: 38px; height: 38px; border-radius: 50%; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: background 0.2s; flex-shrink: 0; }
         .send-btn:hover { background: var(--accent-hover); }
         .send-btn:disabled { opacity: 0.5; cursor: not-allowed; }
@@ -230,8 +238,19 @@ HTML_CONTENT = """<!DOCTYPE html>
                 <div class="mode-pill" id="modeCode" onclick="setMode('code')">💻 Coding</div>
                 <div class="mode-pill" id="modeSearch" onclick="setMode('search')">🔍 Search</div>
             </div>
+
+            <div id="imagePreviewContainer">
+                <img id="imagePreview" src="" alt="Attachment">
+                <span id="imageName" style="font-size: 13px;"></span>
+                <button onclick="removeAttachedImage()">✕</button>
+            </div>
+
             <div class="input-box">
-                <input type="text" id="userInput" placeholder="Ask Aura anything..." onkeydown="if(event.key==='Enter') sendMessage()">
+                <input type="file" id="filePicker" accept="image/*" style="display: none;" onchange="handleFileSelected(event)">
+                <button class="attach-btn" onclick="document.getElementById('filePicker').click()" title="Attach image">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path></svg>
+                </button>
+                <input type="text" id="userInput" placeholder="Ask Aura anything or attach an image..." onkeydown="if(event.key==='Enter') sendMessage()">
                 <button class="send-btn" id="sendBtn" onclick="sendMessage()">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
                 </button>
@@ -305,6 +324,8 @@ HTML_CONTENT = """<!DOCTYPE html>
         let sessions = [];
         let activeSessionId = null;
         let currentMode = "chat";
+        let attachedImageBase64 = null;
+        let attachedImageMime = null;
 
         function isMobile() { return window.innerWidth <= 768; }
 
@@ -317,10 +338,32 @@ HTML_CONTENT = """<!DOCTYPE html>
             });
 
             const input = document.getElementById("userInput");
-            if (mode === "image") input.placeholder = "Describe an image to generate (e.g. A cyberpunk samurai)...";
-            else if (mode === "code") input.placeholder = "Ask for code or debugging (e.g. Write a Python REST API)...";
+            if (mode === "image") input.placeholder = "Describe an image to generate...";
+            else if (mode === "code") input.placeholder = "Ask for code or debugging...";
             else if (mode === "search") input.placeholder = "Search live Google facts and news...";
-            else input.placeholder = "Ask Aura anything...";
+            else input.placeholder = "Ask Aura anything or attach an image...";
+        }
+
+        function handleFileSelected(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            attachedImageMime = file.type || "image/jpeg";
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                attachedImageBase64 = e.target.result;
+                document.getElementById("imagePreview").src = attachedImageBase64;
+                document.getElementById("imageName").innerText = file.name;
+                document.getElementById("imagePreviewContainer").style.display = "flex";
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function removeAttachedImage() {
+            attachedImageBase64 = null;
+            attachedImageMime = null;
+            document.getElementById("filePicker").value = "";
+            document.getElementById("imagePreviewContainer").style.display = "none";
         }
 
         function toggleSidebar() {
@@ -463,12 +506,12 @@ HTML_CONTENT = """<!DOCTYPE html>
             container.innerHTML = "";
             const currentSess = sessions.find(s => s.id === activeSessionId);
             if (!currentSess || currentSess.messages.length === 0) {
-                appendMessageToDOM("ai", "A", "Hello! I am Aura, your Multimodal AI Assistant. Choose a mode below (💬 Chat, 🎨 Image Gen, 💻 Coding, 🔍 Search) and let's get started!");
+                appendMessageToDOM("ai", "A", "Hello! I am Aura, your Multimodal AI Assistant. You can send text, attach images 📎, or select a mode below!");
                 return;
             }
             const userInitial = window.currentUser ? window.currentUser.displayName[0].toUpperCase() : "U";
             currentSess.messages.forEach(msg => {
-                appendMessageToDOM(msg.sender, msg.sender === 'user' ? userInitial : 'A', msg.text);
+                appendMessageToDOM(msg.sender, msg.sender === 'user' ? userInitial : 'A', msg.text, msg.image);
             });
         }
 
@@ -476,9 +519,14 @@ HTML_CONTENT = """<!DOCTYPE html>
             const input = document.getElementById("userInput");
             const btn = document.getElementById("sendBtn");
             const message = input.value.trim();
-            if (!message) return;
+            const sendImageBase64 = attachedImageBase64;
+            const sendImageMime = attachedImageMime;
+
+            if (!message && !sendImageBase64) return;
 
             input.value = "";
+            removeAttachedImage();
+
             let currentSess = sessions.find(s => s.id === activeSessionId);
             if (!currentSess) {
                 startNewChat();
@@ -486,12 +534,12 @@ HTML_CONTENT = """<!DOCTYPE html>
             }
 
             if (currentSess.messages.length === 0) {
-                currentSess.title = message.substring(0, 24) + (message.length > 24 ? "..." : "");
+                currentSess.title = (message || "Image Attached").substring(0, 24) + ((message || "").length > 24 ? "..." : "");
             }
 
             const userInitial = window.currentUser ? window.currentUser.displayName[0].toUpperCase() : "U";
-            currentSess.messages.push({ sender: "user", text: message });
-            appendMessageToDOM("user", userInitial, message);
+            currentSess.messages.push({ sender: "user", text: message, image: sendImageBase64 });
+            appendMessageToDOM("user", userInitial, message, sendImageBase64);
             saveState();
             renderSidebar();
 
@@ -504,11 +552,13 @@ HTML_CONTENT = """<!DOCTYPE html>
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({ 
-                        message: message, 
+                        message: message || "Please analyze this image.", 
                         user_id: userId,
                         session_id: activeSessionId,
                         enable_search: currentMode === "search",
-                        mode: currentMode
+                        mode: currentMode,
+                        image_base64: sendImageBase64,
+                        image_mime_type: sendImageMime
                     })
                 });
                 const data = await res.json();
@@ -524,7 +574,7 @@ HTML_CONTENT = """<!DOCTYPE html>
             }
         }
 
-        function appendMessageToDOM(sender, initial, text) {
+        function appendMessageToDOM(sender, initial, text, imageSrc = null) {
             const container = document.getElementById("chat-container");
             const msgDiv = document.createElement("div");
             msgDiv.className = `message ${sender}`;
@@ -535,12 +585,18 @@ HTML_CONTENT = """<!DOCTYPE html>
 
             const bubble = document.createElement("div");
             bubble.className = "bubble";
-            
-            // Parse Markdown for rich images & code blocks
-            if (window.marked) {
-                bubble.innerHTML = marked.parse(text);
-            } else {
-                bubble.innerText = text;
+
+            if (imageSrc) {
+                const imgEl = document.createElement("img");
+                imgEl.src = imageSrc;
+                bubble.appendChild(imgEl);
+            }
+
+            if (text) {
+                const textDiv = document.createElement("div");
+                if (window.marked) textDiv.innerHTML = marked.parse(text);
+                else textDiv.innerText = text;
+                bubble.appendChild(textDiv);
             }
 
             msgDiv.appendChild(avatar);
@@ -585,7 +641,16 @@ async def chat(req: ChatRequest):
         now = datetime.datetime.now(datetime.timezone.utc)
         live_date_context = now.strftime("%A, %B %d, %Y")
         prompt_text = f"[System Note: Live Date Context - Today is {live_date_context}. Current Year: {now.year}. Mode: {req.mode}. Fully trust and accept all 2026 news, tech developments, and AI model releases.]\n\n{req.message}"
-        user_content = types.Content(role="user", parts=[types.Part(text=prompt_text)])
+        
+        parts = [types.Part(text=prompt_text)]
+        if req.image_base64:
+            import base64
+            clean_b64 = req.image_base64.split(",")[-1]
+            img_bytes = base64.b64decode(clean_b64)
+            mime = req.image_mime_type or "image/jpeg"
+            parts.append(types.Part.from_bytes(data=img_bytes, mime_type=mime))
+
+        user_content = types.Content(role="user", parts=parts)
         
         response_text = ""
         events = []
