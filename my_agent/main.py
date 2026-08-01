@@ -654,13 +654,29 @@ async def chat(req: ChatRequest):
         
         response_text = ""
         events = []
-        async for event in use_runner.run_async(user_id=req.user_id, session_id=req.session_id, new_message=user_content):
-            events.append(event)
-            if hasattr(event, 'content') and event.content:
-                if hasattr(event.content, 'parts'):
-                    for part in event.content.parts:
-                        if hasattr(part, 'text') and part.text:
-                            response_text += part.text
+        try:
+            async for event in use_runner.run_async(user_id=req.user_id, session_id=req.session_id, new_message=user_content):
+                events.append(event)
+                if hasattr(event, 'content') and event.content:
+                    if hasattr(event.content, 'parts'):
+                        for part in event.content.parts:
+                            if hasattr(part, 'text') and part.text:
+                                response_text += part.text
+        except Exception as run_err:
+            if ("429" in str(run_err) or "RESOURCE_EXHAUSTED" in str(run_err) or "quota" in str(run_err).lower()) and use_runner == search_runner:
+                fallback_session = await session_service.get_session(app_name="aura", user_id=req.user_id, session_id=req.session_id)
+                if not fallback_session:
+                    fallback_session = await session_service.create_session(app_name="aura", user_id=req.user_id, session_id=req.session_id)
+                async for event in runner.run_async(user_id=req.user_id, session_id=req.session_id, new_message=user_content):
+                    if hasattr(event, 'content') and event.content:
+                        if hasattr(event.content, 'parts'):
+                            for part in event.content.parts:
+                                if hasattr(part, 'text') and part.text:
+                                    response_text += part.text
+                if response_text:
+                    response_text = "*(Note: Live Search daily quota limit reached, answered using core knowledge mode)*\n\n" + response_text
+            else:
+                raise run_err
         
         if not response_text and events:
             for ev in reversed(events):
