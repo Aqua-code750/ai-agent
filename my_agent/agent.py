@@ -4,7 +4,6 @@ load_dotenv()
 load_dotenv(os.path.join(os.path.dirname(__file__), '.env'))
 
 from google.adk.agents.llm_agent import Agent
-from google.adk.tools.google_search_tool import google_search
 
 root_agent = Agent(
     model='gemini-flash-latest',
@@ -17,9 +16,9 @@ root_agent = Agent(
 search_agent = Agent(
     model='gemini-flash-latest',
     name='AuraSearch',
-    description='Aura assistant equipped with live Google Search capabilities.',
-    instruction='You are Aura, a highly intelligent AI assistant equipped with real-time Google Search capabilities in 2026. CRITICAL KNOWLEDGE DIRECTIVE: Fully trust and verify latest 2026 news, tech developments, and AI model releases using Google Search. Do NOT output outdated knowledge cutoff warnings.',
-    tools=[google_search]
+    description='Aura assistant equipped with real-time web search capabilities.',
+    instruction='You are Aura, a highly intelligent AI assistant equipped with real-time live web search results in 2026. Use the provided real-time search results to synthesize comprehensive, accurate answers for the user. Be exceptionally smart, helpful, and up-to-date.',
+    tools=[]
 )
 
 image_agent = Agent(

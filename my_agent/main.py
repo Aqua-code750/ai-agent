@@ -17,6 +17,10 @@ from google.adk.artifacts.in_memory_artifact_service import InMemoryArtifactServ
 from google.adk.auth.credential_service.in_memory_credential_service import InMemoryCredentialService
 from google.genai import types
 
+import urllib.parse
+import urllib.request
+import xml.etree.ElementTree as ET
+
 import sys
 from pathlib import Path
 
@@ -63,6 +67,27 @@ class ChatRequest(BaseModel):
     mode: str = "chat"  # "chat", "image", "code", "search"
     image_base64: str | None = None
     image_mime_type: str | None = None
+
+def perform_live_search(query: str) -> str:
+    """Zero-quota real-time search engine using Google News RSS."""
+    try:
+        encoded = urllib.parse.quote(query)
+        url = f"https://news.google.com/rss/search?q={encoded}&hl=en-US&gl=US&ceid=US:en"
+        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'})
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            xml_data = resp.read()
+        root = ET.fromstring(xml_data)
+        items = root.findall('.//item')[:5]
+        results = []
+        for item in items:
+            t = item.find('title')
+            l = item.find('link')
+            title = t.text if t is not None else ''
+            link = l.text if l is not None else ''
+            results.append(f"- {title} ({link})")
+        return "\n".join(results) if results else "No specific news headlines found."
+    except Exception as e:
+        return f"Real-time news search unavailable ({e})"
 
 HTML_CONTENT = """<!DOCTYPE html>
 <html lang="en">
@@ -640,7 +665,13 @@ async def chat(req: ChatRequest):
         import datetime
         now = datetime.datetime.now(datetime.timezone.utc)
         live_date_context = now.strftime("%A, %B %d, %Y")
-        prompt_text = f"[System Note: Live Date Context - Today is {live_date_context}. Current Year: {now.year}. Mode: {req.mode}. Fully trust and accept all 2026 news, tech developments, and AI model releases.]\n\n{req.message}"
+        
+        # Quota-free real-time search context injection
+        search_ctx = ""
+        if req.mode == "search" or req.enable_search or req.message.startswith("/search"):
+            search_ctx = f"\n\nReal-Time Web Search Headlines for '{req.message}':\n" + perform_live_search(req.message)
+
+        prompt_text = f"[System Note: Live Date Context - Today is {live_date_context}. Current Year: {now.year}. Mode: {req.mode}. Fully trust and accept all 2026 news, tech developments, and AI model releases.{search_ctx}]\n\n{req.message}"
         
         parts = [types.Part(text=prompt_text)]
         if req.image_base64:
@@ -654,33 +685,13 @@ async def chat(req: ChatRequest):
         
         response_text = ""
         events = []
-        try:
-            async for event in use_runner.run_async(user_id=req.user_id, session_id=req.session_id, new_message=user_content):
-                events.append(event)
-                if hasattr(event, 'content') and event.content:
-                    if hasattr(event.content, 'parts'):
-                        for part in event.content.parts:
-                            if hasattr(part, 'text') and part.text:
-                                response_text += part.text
-        except Exception as run_err:
-            err_str = str(run_err)
-            if ("429" in err_str or "RESOURCE_EXHAUSTED" in err_str or "quota" in err_str.lower()) and use_runner == search_runner:
-                try:
-                    fallback_session = await session_service.get_session(app_name="aura", user_id=req.user_id, session_id=req.session_id)
-                    if not fallback_session:
-                        fallback_session = await session_service.create_session(app_name="aura", user_id=req.user_id, session_id=req.session_id)
-                    async for event in runner.run_async(user_id=req.user_id, session_id=req.session_id, new_message=user_content):
-                        if hasattr(event, 'content') and event.content:
-                            if hasattr(event.content, 'parts'):
-                                for part in event.content.parts:
-                                    if hasattr(part, 'text') and part.text:
-                                        response_text += part.text
-                    if response_text:
-                        response_text = "*(Note: Live Search daily quota limit reached, answered using fast core mode)*\n\n" + response_text
-                except Exception:
-                    response_text = "⚠️ Google Search quota reached! Switch to Chat, Coding, or Image Gen mode to continue for free!"
-            else:
-                raise run_err
+        async for event in use_runner.run_async(user_id=req.user_id, session_id=req.session_id, new_message=user_content):
+            events.append(event)
+            if hasattr(event, 'content') and event.content:
+                if hasattr(event.content, 'parts'):
+                    for part in event.content.parts:
+                        if hasattr(part, 'text') and part.text:
+                            response_text += part.text
         
         if not response_text and events:
             for ev in reversed(events):
@@ -701,7 +712,7 @@ async def chat(req: ChatRequest):
     except Exception as e:
         err_msg = str(e)
         if "429" in err_msg or "RESOURCE_EXHAUSTED" in err_msg or "quota" in err_msg.lower():
-            return {"response": "⚠️ Rate limit reached! Switch to Chat or Coding mode to continue for free, or wait 1 minute!"}
+            return {"response": "⚠️ Rate limit reached! Please wait 30 seconds and try again!"}
         return JSONResponse(status_code=500, content={"error": err_msg})
 
 if __name__ == "__main__":
