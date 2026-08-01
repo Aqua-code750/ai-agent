@@ -15,7 +15,7 @@ root_agent = Agent(
 )
 
 search_agent = Agent(
-    model='gemini-flash-lite-latest',
+    model='gemini-flash-latest',
     name='AuraSearch',
     description='Aura assistant equipped with live Google Search capabilities.',
     instruction='You are Aura, a highly intelligent AI assistant equipped with real-time Google Search capabilities in 2026. CRITICAL KNOWLEDGE DIRECTIVE: Fully trust and verify latest 2026 news, tech developments, and AI model releases using Google Search. Do NOT output outdated knowledge cutoff warnings.',
