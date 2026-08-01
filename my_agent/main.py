@@ -25,9 +25,9 @@ sys.path.insert(0, str(Path(__file__).parent.parent.resolve()))
 sys.path.insert(0, str(Path(__file__).parent.resolve()))
 
 try:
-    from my_agent.agent import root_agent, search_agent
+    from my_agent.agent import root_agent, search_agent, image_agent, code_agent
 except ModuleNotFoundError:
-    from agent import root_agent, search_agent
+    from agent import root_agent, search_agent, image_agent, code_agent
 
 app = FastAPI(title="Aura Agent API")
 
@@ -44,34 +44,32 @@ artifact_service = InMemoryArtifactService()
 credential_service = InMemoryCredentialService()
 
 adk_app = App(name="aura", root_agent=root_agent)
-runner = Runner(
-    app=adk_app,
-    session_service=session_service,
-    artifact_service=artifact_service,
-    credential_service=credential_service,
-)
+runner = Runner(app=adk_app, session_service=session_service, artifact_service=artifact_service, credential_service=credential_service)
 
 adk_search_app = App(name="aura_search", root_agent=search_agent)
-search_runner = Runner(
-    app=adk_search_app,
-    session_service=session_service,
-    artifact_service=artifact_service,
-    credential_service=credential_service,
-)
+search_runner = Runner(app=adk_search_app, session_service=session_service, artifact_service=artifact_service, credential_service=credential_service)
+
+adk_image_app = App(name="aura_image", root_agent=image_agent)
+image_runner = Runner(app=adk_image_app, session_service=session_service, artifact_service=artifact_service, credential_service=credential_service)
+
+adk_code_app = App(name="aura_code", root_agent=code_agent)
+code_runner = Runner(app=adk_code_app, session_service=session_service, artifact_service=artifact_service, credential_service=credential_service)
 
 class ChatRequest(BaseModel):
     message: str
     user_id: str = "default_user"
     session_id: str = "default_session"
     enable_search: bool = False
+    mode: str = "chat"  # "chat", "image", "code", "search"
 
 HTML_CONTENT = """<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Aura - Mobile & Desktop AI Assistant</title>
-    <link href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;700&family=Roboto:wght@400;500&display=swap" rel="stylesheet">
+    <title>Aura - Multimodal AI Studio</title>
+    <link href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;700&family=Roboto:wght@400;500&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <style>
         :root {
             --bg-color: #ffffff;
@@ -87,6 +85,7 @@ HTML_CONTENT = """<!DOCTYPE html>
             --ai-avatar-bg: #0f9d58;
             --user-avatar-bg: #1a73e8;
             --hover-color: #e2e7eb;
+            --code-bg: #1e1e1e;
         }
         @media (prefers-color-scheme: dark) {
             :root {
@@ -103,16 +102,15 @@ HTML_CONTENT = """<!DOCTYPE html>
                 --ai-avatar-bg: #34a853;
                 --user-avatar-bg: #4285f4;
                 --hover-color: #2a2b2d;
+                --code-bg: #0d0d0d;
             }
         }
         * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Google Sans', 'Roboto', sans-serif; -webkit-tap-highlight-color: transparent; }
         body { background-color: var(--bg-color); color: var(--text-primary); height: 100vh; height: 100dvh; display: flex; overflow: hidden; position: fixed; width: 100%; }
         
-        /* Mobile Overlay Backdrop */
         #sidebarBackdrop { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.4); z-index: 99; display: none; opacity: 0; transition: opacity 0.3s ease; }
         #sidebarBackdrop.open { display: block; opacity: 1; }
 
-        /* Sidebar Drawer */
         #sidebar { width: 280px; background: var(--sidebar-color); border-right: 1px solid var(--border-color); display: flex; flex-direction: column; transition: transform 0.3s ease, margin-right 0.3s ease; flex-shrink: 0; z-index: 100; }
         .sidebar-header { padding: 16px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border-color); }
         .new-chat-btn { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; padding: 12px 16px; background: var(--accent-color); color: white; border: none; border-radius: 24px; font-weight: 500; font-size: 14px; cursor: pointer; transition: background 0.2s; min-height: 44px; }
@@ -124,18 +122,14 @@ HTML_CONTENT = """<!DOCTYPE html>
         .delete-chat { color: var(--text-secondary); padding: 6px; border-radius: 50%; border: none; background: transparent; cursor: pointer; min-width: 32px; min-height: 32px; display: flex; align-items: center; justify-content: center; }
         .delete-chat:hover { color: #ea4335; background: var(--hover-color); }
 
-        /* Desktop Sidebar behavior */
         @media (min-width: 769px) {
             #sidebar.collapsed { transform: translateX(-280px); margin-right: -280px; }
         }
-
-        /* Mobile Responsive Sidebar behavior */
         @media (max-width: 768px) {
-            #sidebar { position: fixed; top: 0; left: 0; bottom: 0; height: 100dvh; transform: translateX(-100%); box-shadow: none; }
+            #sidebar { position: fixed; top: 0; left: 0; bottom: 0; height: 100dvh; transform: translateX(-100%); }
             #sidebar.open { transform: translateX(0); box-shadow: 4px 0 24px rgba(0,0,0,0.25); }
         }
 
-        /* Main Content */
         #main-wrapper { flex: 1; display: flex; flex-direction: column; height: 100vh; height: 100dvh; overflow: hidden; width: 100%; }
         header { padding: 12px 16px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border-color); background: var(--surface-color); min-height: 56px; }
         .left-head { display: flex; align-items: center; gap: 10px; }
@@ -148,7 +142,6 @@ HTML_CONTENT = """<!DOCTYPE html>
         .profile-chip { display: flex; align-items: center; gap: 6px; padding: 6px 12px; background: var(--surface-color); border: 1px solid var(--border-color); border-radius: 18px; font-size: 13px; font-weight: 500; cursor: pointer; color: var(--text-primary); max-width: 140px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-height: 36px; }
         .profile-chip:hover { background: var(--hover-color); }
         .logout-btn { padding: 6px 12px; background: transparent; border: 1px solid var(--border-color); border-radius: 18px; font-size: 13px; font-weight: 500; cursor: pointer; color: #ea4335; display: none; min-height: 36px; }
-        .logout-btn:hover { background: rgba(234, 67, 53, 0.1); }
 
         #chat-container { flex: 1; overflow-y: auto; padding: 16px 12px; max-width: 800px; width: 100%; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; -webkit-overflow-scrolling: touch; }
         .message { display: flex; gap: 10px; max-width: 90%; animation: fadeIn 0.2s ease; }
@@ -157,15 +150,21 @@ HTML_CONTENT = """<!DOCTYPE html>
         .avatar { width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; color: white; flex-shrink: 0; }
         .user .avatar { background: var(--user-avatar-bg); }
         .ai .avatar { background: var(--ai-avatar-bg); }
-        .bubble { padding: 12px 16px; border-radius: 18px; font-size: 15px; line-height: 1.5; word-wrap: break-word; white-space: pre-wrap; border: 1px solid var(--border-color); }
+        .bubble { padding: 14px 18px; border-radius: 18px; font-size: 15px; line-height: 1.5; word-wrap: break-word; border: 1px solid var(--border-color); overflow: hidden; }
         .user .bubble { background: var(--user-bubble); border: none; border-top-right-radius: 4px; }
         .ai .bubble { background: var(--ai-bubble); border-top-left-radius: 4px; }
+        
+        .bubble img { max-width: 100%; border-radius: 12px; margin-top: 8px; border: 1px solid var(--border-color); display: block; }
+        .bubble pre { background: var(--code-bg); color: #00ff66; padding: 12px; border-radius: 8px; font-family: 'Fira Code', monospace; font-size: 13px; overflow-x: auto; margin: 8px 0; }
+        .bubble code { font-family: 'Fira Code', monospace; font-size: 13px; background: rgba(0,0,0,0.06); padding: 2px 5px; border-radius: 4px; }
 
         footer { padding: 10px 14px calc(10px + env(safe-area-inset-bottom, 0px)); max-width: 800px; width: 100%; margin: 0 auto; display: flex; flex-direction: column; gap: 8px; background: var(--bg-color); }
-        .controls { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
-        .search-toggle { font-size: 12px; font-weight: 500; border: 1px solid var(--border-color); padding: 5px 12px; border-radius: 16px; cursor: pointer; background: var(--surface-color); color: var(--text-secondary); transition: all 0.2s; display: flex; align-items: center; gap: 4px; user-select: none; min-height: 32px; }
-        .search-toggle.active { background: rgba(26, 115, 232, 0.15); color: var(--accent-color); border-color: var(--accent-color); }
         
+        /* Mode Selector Pills */
+        .mode-bar { display: flex; align-items: center; gap: 6px; overflow-x: auto; padding-bottom: 2px; -webkit-overflow-scrolling: touch; }
+        .mode-pill { font-size: 12px; font-weight: 500; border: 1px solid var(--border-color); padding: 6px 14px; border-radius: 16px; cursor: pointer; background: var(--surface-color); color: var(--text-secondary); transition: all 0.2s; display: flex; align-items: center; gap: 5px; user-select: none; flex-shrink: 0; min-height: 32px; }
+        .mode-pill.active { background: rgba(26, 115, 232, 0.15); color: var(--accent-color); border-color: var(--accent-color); font-weight: 700; }
+
         .input-box { display: flex; align-items: center; background: var(--surface-color); border: 1px solid var(--border-color); border-radius: 24px; padding: 4px 8px 4px 14px; transition: border-color 0.2s; min-height: 48px; }
         .input-box:focus-within { border-color: var(--accent-color); box-shadow: 0 0 0 2px rgba(26,115,232,0.15); }
         input { flex: 1; border: none; background: transparent; color: var(--text-primary); font-size: 16px; padding: 8px 4px; outline: none; width: 100%; }
@@ -175,16 +174,14 @@ HTML_CONTENT = """<!DOCTYPE html>
         .spinner { width: 18px; height: 18px; border: 2px solid #ffffff; border-top: 2px solid transparent; border-radius: 50%; animation: spin 0.8s linear infinite; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
 
-        /* Auth Modal Mobile Optimized */
         .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); display: none; align-items: center; justify-content: center; z-index: 2000; padding: 16px; }
         .modal-overlay.open { display: flex; }
-        .modal { background: var(--bg-color); border: 1px solid var(--border-color); border-radius: 20px; padding: 24px 20px; width: 100%; max-width: 380px; display: flex; flex-direction: column; gap: 14px; box-shadow: 0 8px 32px rgba(0,0,0,0.2); }
+        .modal { background: var(--bg-color); border: 1px solid var(--border-color); border-radius: 20px; padding: 24px 20px; width: 100%; max-width: 380px; display: flex; flex-direction: column; gap: 14px; }
         .modal h3 { font-size: 18px; font-weight: 500; }
         .tab-bar { display: flex; border-bottom: 1px solid var(--border-color); margin-bottom: 4px; }
-        .tab { flex: 1; text-align: center; padding: 10px; font-size: 14px; font-weight: 500; cursor: pointer; border-bottom: 2px solid transparent; color: var(--text-secondary); min-height: 44px; }
+        .tab { flex: 1; text-align: center; padding: 10px; font-size: 14px; font-weight: 500; cursor: pointer; border-bottom: 2px solid transparent; color: var(--text-secondary); }
         .tab.active { border-color: var(--accent-color); color: var(--accent-color); }
         .modal input { border: 1px solid var(--border-color); border-radius: 12px; padding: 12px 14px; font-size: 16px; width: 100%; color: var(--text-primary); background: var(--surface-color); outline: none; }
-        .modal input:focus { border-color: var(--accent-color); }
         .modal-btns { display: flex; justify-content: flex-end; gap: 10px; margin-top: 8px; }
         .btn-flat { padding: 12px 20px; border-radius: 12px; font-size: 14px; font-weight: 500; cursor: pointer; border: none; min-height: 44px; }
         .btn-secondary { background: var(--surface-color); color: var(--text-primary); border: 1px solid var(--border-color); }
@@ -227,10 +224,11 @@ HTML_CONTENT = """<!DOCTYPE html>
         <div id="chat-container"></div>
 
         <footer>
-            <div class="controls">
-                <div class="search-toggle" id="searchToggle" onclick="toggleSearch()">
-                    <span>🌐 Web Search: OFF</span>
-                </div>
+            <div class="mode-bar">
+                <div class="mode-pill active" id="modeChat" onclick="setMode('chat')">💬 Chat</div>
+                <div class="mode-pill" id="modeImage" onclick="setMode('image')">🎨 Image Gen</div>
+                <div class="mode-pill" id="modeCode" onclick="setMode('code')">💻 Coding</div>
+                <div class="mode-pill" id="modeSearch" onclick="setMode('search')">🔍 Search</div>
             </div>
             <div class="input-box">
                 <input type="text" id="userInput" placeholder="Ask Aura anything..." onkeydown="if(event.key==='Enter') sendMessage()">
@@ -261,12 +259,10 @@ HTML_CONTENT = """<!DOCTYPE html>
         </div>
     </div>
 
-    <!-- Firebase App & Auth SDK (Project: fir-fb9da) -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
         import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, updateProfile } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
-        // Firebase Configuration for project fir-fb9da
         const firebaseConfig = {
             apiKey: "AIzaSyDepR3o-75rgL4Ah5MXGZtFoDJFCk2BEB4",
             authDomain: "fir-fb9da.firebaseapp.com",
@@ -308,10 +304,23 @@ HTML_CONTENT = """<!DOCTYPE html>
         let currentAuthMode = "login";
         let sessions = [];
         let activeSessionId = null;
-        let webSearchEnabled = false;
+        let currentMode = "chat";
 
-        function isMobile() {
-            return window.innerWidth <= 768;
+        function isMobile() { return window.innerWidth <= 768; }
+
+        function setMode(mode) {
+            currentMode = mode;
+            ["chat", "image", "code", "search"].forEach(m => {
+                const el = document.getElementById("mode" + m.charAt(0).toUpperCase() + m.slice(1));
+                if (m === mode) el.classList.add("active");
+                else el.classList.remove("active");
+            });
+
+            const input = document.getElementById("userInput");
+            if (mode === "image") input.placeholder = "Describe an image to generate (e.g. A cyberpunk samurai)...";
+            else if (mode === "code") input.placeholder = "Ask for code or debugging (e.g. Write a Python REST API)...";
+            else if (mode === "search") input.placeholder = "Search live Google facts and news...";
+            else input.placeholder = "Ask Aura anything...";
         }
 
         function toggleSidebar() {
@@ -319,43 +328,23 @@ HTML_CONTENT = """<!DOCTYPE html>
             const backdrop = document.getElementById("sidebarBackdrop");
             if (isMobile()) {
                 sidebar.classList.toggle("open");
-                if (sidebar.classList.contains("open")) {
-                    backdrop.classList.add("open");
-                } else {
-                    backdrop.classList.remove("open");
-                }
+                if (sidebar.classList.contains("open")) backdrop.classList.add("open");
+                else backdrop.classList.remove("open");
             } else {
                 sidebar.classList.toggle("collapsed");
             }
         }
 
         function closeSidebar() {
-            const sidebar = document.getElementById("sidebar");
-            const backdrop = document.getElementById("sidebarBackdrop");
-            sidebar.classList.remove("open");
-            backdrop.classList.remove("open");
-        }
-
-        function toggleSearch() {
-            webSearchEnabled = !webSearchEnabled;
-            const toggle = document.getElementById("searchToggle");
-            if (webSearchEnabled) {
-                toggle.classList.add("active");
-                toggle.innerHTML = "<span>🌐 Web Search: ON</span>";
-            } else {
-                toggle.classList.remove("active");
-                toggle.innerHTML = "<span>🌐 Web Search: OFF</span>";
-            }
+            document.getElementById("sidebar").classList.remove("open");
+            document.getElementById("sidebarBackdrop").classList.remove("open");
         }
 
         function openAuthModal() {
             document.getElementById("authError").style.display = "none";
             document.getElementById("authModal").classList.add("open");
         }
-
-        function closeAuthModal() {
-            document.getElementById("authModal").classList.remove("open");
-        }
+        function closeAuthModal() { document.getElementById("authModal").classList.remove("open"); }
 
         function switchAuthTab(mode) {
             currentAuthMode = mode;
@@ -389,9 +378,7 @@ HTML_CONTENT = """<!DOCTYPE html>
             try {
                 if (currentAuthMode === "signup") {
                     const res = await window.fbCreateUser(window.fbAuth, email, password);
-                    if (name && res.user) {
-                        await window.fbUpdateProfile(res.user, { displayName: name });
-                    }
+                    if (name && res.user) await window.fbUpdateProfile(res.user, { displayName: name });
                 } else {
                     await window.fbSignIn(window.fbAuth, email, password);
                 }
@@ -403,9 +390,7 @@ HTML_CONTENT = """<!DOCTYPE html>
         }
 
         async function handleLogout() {
-            if (window.fbSignOut && window.fbAuth) {
-                await window.fbSignOut(window.fbAuth);
-            }
+            if (window.fbSignOut && window.fbAuth) await window.fbSignOut(window.fbAuth);
         }
 
         window.loadUserSessions = function() {
@@ -413,12 +398,8 @@ HTML_CONTENT = """<!DOCTYPE html>
             sessions = JSON.parse(localStorage.getItem(`aura_fb_sessions_${userId}`)) || [];
             activeSessionId = localStorage.getItem(`aura_fb_active_${userId}`) || null;
 
-            if (!activeSessionId || !sessions.find(s => s.id === activeSessionId)) {
-                startNewChat();
-            } else {
-                renderSidebar();
-                loadActiveSession();
-            }
+            if (!activeSessionId || !sessions.find(s => s.id === activeSessionId)) startNewChat();
+            else { renderSidebar(); loadActiveSession(); }
         };
 
         function startNewChat() {
@@ -471,16 +452,10 @@ HTML_CONTENT = """<!DOCTYPE html>
 
         function deleteSession(id) {
             sessions = sessions.filter(s => s.id !== id);
-            if (activeSessionId === id) {
-                activeSessionId = sessions.length ? sessions[0].id : null;
-            }
+            if (activeSessionId === id) activeSessionId = sessions.length ? sessions[0].id : null;
             saveState();
-            if (!activeSessionId) {
-                startNewChat();
-            } else {
-                renderSidebar();
-                loadActiveSession();
-            }
+            if (!activeSessionId) startNewChat();
+            else { renderSidebar(); loadActiveSession(); }
         }
 
         function loadActiveSession() {
@@ -488,7 +463,7 @@ HTML_CONTENT = """<!DOCTYPE html>
             container.innerHTML = "";
             const currentSess = sessions.find(s => s.id === activeSessionId);
             if (!currentSess || currentSess.messages.length === 0) {
-                appendMessageToDOM("ai", "A", "Hello! I am Aura, your AI assistant. How can I help you today?");
+                appendMessageToDOM("ai", "A", "Hello! I am Aura, your Multimodal AI Assistant. Choose a mode below (💬 Chat, 🎨 Image Gen, 💻 Coding, 🔍 Search) and let's get started!");
                 return;
             }
             const userInitial = window.currentUser ? window.currentUser.displayName[0].toUpperCase() : "U";
@@ -532,7 +507,8 @@ HTML_CONTENT = """<!DOCTYPE html>
                         message: message, 
                         user_id: userId,
                         session_id: activeSessionId,
-                        enable_search: webSearchEnabled 
+                        enable_search: currentMode === "search",
+                        mode: currentMode
                     })
                 });
                 const data = await res.json();
@@ -559,7 +535,13 @@ HTML_CONTENT = """<!DOCTYPE html>
 
             const bubble = document.createElement("div");
             bubble.className = "bubble";
-            bubble.innerText = text;
+            
+            // Parse Markdown for rich images & code blocks
+            if (window.marked) {
+                bubble.innerHTML = marked.parse(text);
+            } else {
+                bubble.innerText = text;
+            }
 
             msgDiv.appendChild(avatar);
             msgDiv.appendChild(bubble);
@@ -567,11 +549,7 @@ HTML_CONTENT = """<!DOCTYPE html>
             container.scrollTop = container.scrollHeight;
         }
 
-        window.addEventListener("resize", () => {
-            if (!isMobile()) closeSidebar();
-        });
-
-        // Default initial setup
+        window.addEventListener("resize", () => { if (!isMobile()) closeSidebar(); });
         window.loadUserSessions();
     </script>
 </body>
@@ -588,7 +566,14 @@ async def chat(req: ChatRequest):
         use_runner = runner
         app_name = "aura"
         
-        if req.enable_search or req.message.startswith("/search"):
+        # Route to appropriate runner mode
+        if req.mode == "image" or req.message.startswith("/image"):
+            use_runner = image_runner
+            app_name = "aura_image"
+        elif req.mode == "code" or req.message.startswith("/code"):
+            use_runner = code_runner
+            app_name = "aura_code"
+        elif req.mode == "search" or req.enable_search or req.message.startswith("/search"):
             use_runner = search_runner
             app_name = "aura_search"
             
@@ -599,7 +584,7 @@ async def chat(req: ChatRequest):
         import datetime
         now = datetime.datetime.now(datetime.timezone.utc)
         live_date_context = now.strftime("%A, %B %d, %Y")
-        prompt_text = f"[System Note: Live Date Context - Today is {live_date_context}. Current Year: {now.year}. Fully trust and accept all 2026 news, tech developments, and AI model releases without training cutoff disclaimers.]\n\n{req.message}"
+        prompt_text = f"[System Note: Live Date Context - Today is {live_date_context}. Current Year: {now.year}. Mode: {req.mode}. Fully trust and accept all 2026 news, tech developments, and AI model releases.]\n\n{req.message}"
         user_content = types.Content(role="user", parts=[types.Part(text=prompt_text)])
         
         response_text = ""
@@ -631,7 +616,7 @@ async def chat(req: ChatRequest):
     except Exception as e:
         err_msg = str(e)
         if "429" in err_msg or "RESOURCE_EXHAUSTED" in err_msg or "quota" in err_msg.lower():
-            return {"response": "⚠️ Web Search quota limit reached! Turn OFF Web Search toggle to continue chatting for free, or wait 1 minute!"}
+            return {"response": "⚠️ Rate limit reached! Switch to Chat or Coding mode to continue for free, or wait 1 minute!"}
         return JSONResponse(status_code=500, content={"error": err_msg})
 
 if __name__ == "__main__":
