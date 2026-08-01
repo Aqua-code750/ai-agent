@@ -684,15 +684,21 @@ async def chat(req: ChatRequest):
         user_content = types.Content(role="user", parts=parts)
         
         response_text = ""
+        error_msg = ""
         events = []
-        async for event in use_runner.run_async(user_id=req.user_id, session_id=req.session_id, new_message=user_content):
-            events.append(event)
-            if hasattr(event, 'content') and event.content:
-                if hasattr(event.content, 'parts'):
-                    for part in event.content.parts:
-                        if hasattr(part, 'text') and part.text:
-                            response_text += part.text
-        
+        try:
+            async for event in use_runner.run_async(user_id=req.user_id, session_id=req.session_id, new_message=user_content):
+                events.append(event)
+                if hasattr(event, 'error_message') and event.error_message:
+                    error_msg = str(event.error_message)
+                if hasattr(event, 'content') and event.content:
+                    if hasattr(event.content, 'parts'):
+                        for part in event.content.parts:
+                            if hasattr(part, 'text') and part.text:
+                                response_text += part.text
+        except Exception as run_err:
+            error_msg = str(run_err)
+
         if not response_text and events:
             for ev in reversed(events):
                 if getattr(ev, 'role', '') == 'model' or getattr(getattr(ev, 'content', None), 'role', '') == 'model':
@@ -706,7 +712,15 @@ async def chat(req: ChatRequest):
                     break
 
         if not response_text:
-            response_text = "I processed your request, but received no text output."
+            if error_msg:
+                if "API key" in error_msg or "GEMINI_API_KEY" in error_msg:
+                    response_text = "⚠️ Server Configuration Alert: GEMINI_API_KEY environment variable is not set on Render. Please add GEMINI_API_KEY to your Render environment variables."
+                elif "429" in error_msg or "RESOURCE_EXHAUSTED" in error_msg or "quota" in error_msg.lower():
+                    response_text = "⚠️ Rate limit reached! Please wait 30 seconds and try again."
+                else:
+                    response_text = f"⚠️ Server Note: {error_msg}"
+            else:
+                response_text = "I processed your request, but received no text output."
 
         return {"response": response_text, "session_id": req.session_id}
     except Exception as e:
